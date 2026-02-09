@@ -1,0 +1,155 @@
+# Nitroplast Import Code Discovery - Configuration
+
+# Paths
+paths:
+  positive_fasta: "data/raw/nitroplast_proteins.fasta"  # 368 proteins
+  negative_fasta: "data/raw/host_cytosolic.fasta"       # 788 proteins
+  full_proteome_fasta: "data/raw/full_proteome.fasta"   # For zero-shot prediction
+  processed_dir: "data/processed/"
+  embedding_cache: "data/embeddings/"
+  output_dir: "results/"
+  checkpoint_dir: "results/checkpoints/"
+
+# Data preprocessing
+data:
+  sequence_similarity_threshold: 0.7  # For clustering-based splitting
+  min_sequence_length: 30
+  max_sequence_length: 2000
+  
+  # Data splits
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+  
+  # Semi-supervised settings
+  use_high_confidence_negatives_only: false  # Set true to filter negatives
+  confident_negative_criteria:
+    # Example: proteins with known cytosolic retention signals
+    has_cytosolic_signal: true
+    exclude_membrane_proteins: true
+    exclude_secreted_proteins: true
+
+# Model architecture
+model:
+  # ESM-2 backbone
+  esm_model_name: "esm2_t33_650M_UR50D"  # 650M parameter model
+  freeze_esm_layers: 20  # Freeze first 20 layers, fine-tune last 13
+  
+  # LoRA configuration
+  use_lora: true
+  lora_r: 8              # Rank of LoRA matrices
+  lora_alpha: 16         # Scaling factor
+  lora_dropout: 0.1
+  lora_target_modules:   # Which attention modules to adapt
+    - "query"
+    - "key"
+    - "value"
+  
+  # Pooling strategy
+  pooling_method: "mean"  # Options: mean, max, attention_weighted
+  
+  # Projection head
+  projector:
+    input_dim: 1280       # ESM-2 650M embedding dim
+    hidden_dims: [512, 256]
+    output_dim: 128       # Final embedding dimension
+    dropout: 0.1
+    use_batch_norm: true
+
+# Training
+training:
+  # Optimization
+  batch_size: 16
+  num_epochs: 100
+  learning_rate: 2e-4
+  weight_decay: 0.01
+  warmup_steps: 500
+  
+  # Learning rate schedule
+  scheduler: "cosine"     # Options: cosine, linear, constant
+  min_lr: 1e-6
+  
+  # Contrastive learning
+  loss_function: "supervised_contrastive"  # SupCon loss
+  temperature: 0.07      # Temperature for InfoNCE
+  
+  # Regularization
+  gradient_clip_norm: 1.0
+  label_smoothing: 0.0
+  
+  # Early stopping
+  patience: 15
+  min_delta: 0.001
+  
+  # Checkpointing
+  save_every_n_epochs: 5
+  keep_top_k_checkpoints: 3
+  metric_for_best_model: "val_contrastive_loss"
+  
+  # Hardware
+  device: "cuda"         # cuda or cpu
+  mixed_precision: true  # Use AMP for faster training
+  num_workers: 4
+  pin_memory: true
+
+# Evaluation
+evaluation:
+  # Metrics to compute
+  compute_embedding_quality: true
+  compute_clustering_metrics: true  # Silhouette score, Davies-Bouldin
+  
+  # Visualization
+  visualize_embeddings: true
+  tsne_perplexity: 30
+  umap_n_neighbors: 15
+  
+  # Attention analysis
+  extract_attention_maps: true
+  attention_heads_to_visualize: [0, 5, 11]  # First, middle, last heads
+  
+# Zero-shot prediction
+inference:
+  # Confidence thresholds
+  distance_metric: "cosine"  # cosine or euclidean
+  confidence_threshold: 0.8  # Minimum similarity to positive cluster
+  
+  # Clustering for novel predictions
+  use_dbscan: true
+  dbscan_eps: 0.3
+  dbscan_min_samples: 3
+  
+  # Output filtering
+  min_prediction_score: 0.7
+  return_top_k: 100
+
+# Interpretability
+interpretability:
+  # Attention visualization settings
+  visualize_per_residue_attention: true
+  aggregate_attention_heads: "mean"  # mean, max, or specific_heads
+  highlight_top_k_residues: 20
+  
+  # Sequence motif discovery
+  extract_high_attention_regions: true
+  attention_window_size: 15  # amino acids
+  min_attention_score: 0.1
+  
+  # Comparison with known uTP motif
+  known_utp_location: "C-terminal"  # For comparison
+  utp_window_size: 50  # Last 50 residues
+
+# Logging and experiment tracking
+logging:
+  use_wandb: false       # Set true to enable Weights & Biases
+  wandb_project: "nitroplast-discovery"
+  wandb_entity: null     # Your W&B username
+  log_every_n_steps: 10
+  log_embeddings_every_n_epochs: 10
+  
+  # TensorBoard
+  use_tensorboard: true
+  tensorboard_dir: "results/tensorboard/"
+
+# Reproducibility
+seed: 42
+deterministic: true
