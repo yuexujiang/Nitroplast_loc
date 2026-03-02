@@ -32,11 +32,11 @@ data:
 # Model architecture
 model:
   # ESM-2 backbone
-  esm_model_name: "esm2_t33_650M_UR50D"  # 650M parameter model
-  freeze_esm_layers: 20  # Freeze first 20 layers, fine-tune last 13
+  esm_model_name: "facebook/esm2_t33_650M_UR50D"  # 650M parameter model
+  freeze_esm_layers: 30  # Freeze first 20 layers, fine-tune last 13
   
   # LoRA configuration
-  use_lora: true
+  use_lora: False
   lora_r: 8              # Rank of LoRA matrices
   lora_alpha: 16         # Scaling factor
   lora_dropout: 0.1
