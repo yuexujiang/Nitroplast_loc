@@ -2,19 +2,22 @@
 
 # Paths
 paths:
-  positive_fasta: "data/raw/nitroplast_proteins.fasta"  # 368 proteins
-  negative_fasta: "data/raw/host_cytosolic.fasta"       # 788 proteins
+  positive_fasta: "data/raw/positive_samples_368.fasta"  # 368 proteins
+  negative_fasta: "data/raw/negative_samples_788.fasta"       # 788 proteins
   full_proteome_fasta: "data/raw/full_proteome.fasta"   # For zero-shot prediction
   processed_dir: "data/processed/"
   embedding_cache: "data/embeddings/"
   output_dir: "results/"
   checkpoint_dir: "results/checkpoints/"
+  # Sub-test FASTA files used in cross-validation (section 11 logic)
+  no_utp_fasta: "data/raw/positive_no_uTP.fasta"        # Positives without uTP motif
+  utp_neg_fasta: "data/raw/uTP_in_negative.fasta"       # uTP-motif proteins in negatives
 
 # Data preprocessing
 data:
   sequence_similarity_threshold: 0.7  # For clustering-based splitting
   min_sequence_length: 30
-  max_sequence_length: 2000
+  max_sequence_length: 1022
   
   # Data splits
   train_ratio: 0.7
@@ -33,10 +36,11 @@ data:
 model:
   # ESM-2 backbone
   esm_model_name: "facebook/esm2_t33_650M_UR50D"  # 650M parameter model
-  freeze_esm_layers: 30  # Freeze first 20 layers, fine-tune last 13
+  freeze_esm_layers: 33  # Freeze first 20 layers, fine-tune last 13
   
   # LoRA configuration
-  use_lora: False
+  use_lora: True
+  esm_num_end_lora: 16
   lora_r: 8              # Rank of LoRA matrices
   lora_alpha: 16         # Scaling factor
   lora_dropout: 0.1
@@ -82,7 +86,7 @@ training:
   min_delta: 0.001
   
   # Checkpointing
-  save_every_n_epochs: 5
+  save_every_n_epochs: 50
   keep_top_k_checkpoints: 3
   metric_for_best_model: "val_contrastive_loss"
   

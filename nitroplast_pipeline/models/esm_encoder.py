@@ -31,6 +31,7 @@ class ESMEncoder(nn.Module):
         model_name: str = "facebook/esm2_t33_650M_UR50D",
         use_lora: bool = True,
         lora_config: Optional[Dict] = None,
+        num_end_lora_layers: Optional[int] = None,
         freeze_layers: Optional[int] = None,
         pooling_method: str = "mean",
         device: str = "cuda"
@@ -40,6 +41,8 @@ class ESMEncoder(nn.Module):
             model_name: HuggingFace model identifier for ESM-2
             use_lora: Whether to add LoRA adapters
             lora_config: LoRA hyperparameters (r, alpha, dropout, target_modules)
+            num_end_lora_layers: Apply LoRA only to the last N transformer layers.
+                                 None means apply to all layers.
             freeze_layers: Number of transformer layers to freeze (from bottom)
             pooling_method: How to pool residue embeddings (mean, max, attention_weighted)
             device: cuda or cpu
@@ -59,13 +62,15 @@ class ESMEncoder(nn.Module):
         self.embedding_dim = self.esm_model.config.hidden_size
         logger.info(f"ESM-2 embedding dimension: {self.embedding_dim}")
         
-        # Apply LoRA if requested
-        if use_lora:
-            self._apply_lora(lora_config or {})
-        
+
         # Freeze layers if requested
         if freeze_layers is not None:
             self._freeze_layers(freeze_layers)
+        
+        # Apply LoRA if requested
+        if use_lora:
+            self._apply_lora(lora_config or {}, num_end_layers=num_end_lora_layers)
+        
         
         # Attention-weighted pooling (if needed)
         if pooling_method == "attention_weighted":
@@ -73,19 +78,33 @@ class ESMEncoder(nn.Module):
         
         self.to(device)
     
-    def _apply_lora(self, lora_config: Dict):
-        """Add LoRA adapters to the model."""
-        logger.info("Applying LoRA adaptation...")
-        
+    def _apply_lora(self, lora_config: Dict, num_end_layers: Optional[int] = None):
+        """Add LoRA adapters to the model, optionally restricted to the last N layers."""
+        num_hidden_layers = self.esm_model.config.num_hidden_layers
+
+        layers_to_transform = None
+        if num_end_layers is not None:
+            num_end_layers = min(num_end_layers, num_hidden_layers)
+            start_layer = num_hidden_layers - num_end_layers
+            layers_to_transform = list(range(start_layer, num_hidden_layers))
+            logger.info(
+                f"Applying LoRA to last {num_end_layers} layers "
+                f"(indices {start_layer}–{num_hidden_layers - 1} of {num_hidden_layers} total)..."
+            )
+        else:
+            logger.info(f"Applying LoRA to all {num_hidden_layers} layers...")
+
         peft_config = LoraConfig(
             task_type=TaskType.FEATURE_EXTRACTION,
             r=lora_config.get('r', 8),
             lora_alpha=lora_config.get('alpha', 16),
             lora_dropout=lora_config.get('dropout', 0.1),
             target_modules=lora_config.get('target_modules', ["query", "value"]),
+            layers_to_transform=layers_to_transform,
+            layers_pattern=["layer"] if layers_to_transform is not None else None,
             bias="none"
         )
-        
+
         self.esm_model = get_peft_model(self.esm_model, peft_config)
         self.esm_model.print_trainable_parameters()
     
@@ -102,6 +121,10 @@ class ESMEncoder(nn.Module):
             if i < num_layers:
                 for param in layer.parameters():
                     param.requires_grad = False
+        # Add this — pooler is irrelevant when using mean pooling anyway
+        if hasattr(self.esm_model, 'pooler') and self.esm_model.pooler is not None:
+            for param in self.esm_model.pooler.parameters():
+                param.requires_grad = False
     
     def pool_residue_embeddings(
         self,
@@ -162,6 +185,9 @@ class ESMEncoder(nn.Module):
                 - attention: [batch_size, num_heads, seq_len, seq_len] - Attention weights (optional)
         """
         # Tokenize sequences
+        # Keep last 1022 AA (C-terminus) for sequences exceeding the ESM-2 limit
+        MAX_AA = 1022
+        sequences = [s[-MAX_AA:] if len(s) > MAX_AA else s for s in sequences]
         encoded = self.tokenizer(
             sequences,
             return_tensors="pt",

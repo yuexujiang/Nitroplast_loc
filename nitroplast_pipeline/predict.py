@@ -111,7 +111,6 @@ def main(args):
         reference_labels=ref_labels,
         reference_ids=ref_ids,
         distance_metric=config['inference']['distance_metric'],
-        confidence_threshold=config['inference']['confidence_threshold'],
         device=device
     )
     

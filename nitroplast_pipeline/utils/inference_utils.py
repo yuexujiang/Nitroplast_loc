@@ -33,7 +33,6 @@ class NitroplastPredictor:
         reference_labels: np.ndarray,
         reference_ids: List[str],
         distance_metric: str = "cosine",
-        confidence_threshold: float = 0.8,
         device: str = "cuda"
     ):
         """
@@ -43,19 +42,17 @@ class NitroplastPredictor:
             reference_labels: [N] - Known labels (0 or 1)
             reference_ids: [N] - Reference protein IDs
             distance_metric: 'cosine' or 'euclidean'
-            confidence_threshold: Minimum similarity to positive cluster
             device: cuda or cpu
         """
         self.model = model
         self.model.eval()
         self.device = device
-        
+
         self.reference_embeddings = reference_embeddings
         self.reference_labels = reference_labels
         self.reference_ids = reference_ids
-        
+
         self.distance_metric = distance_metric
-        self.confidence_threshold = confidence_threshold
         
         # Compute positive and negative centroids
         self.positive_mask = reference_labels == 1
@@ -282,6 +279,7 @@ def load_model_for_inference(
     encoder = ESMEncoder(
         model_name=config['model']['esm_model_name'],
         use_lora=config['model']['use_lora'],
+        num_end_lora_layers=config['model']['esm_num_end_lora'],
         lora_config={
             'r': config['model']['lora_r'],
             'alpha': config['model']['lora_alpha'],
@@ -301,8 +299,8 @@ def load_model_for_inference(
         use_batch_norm=config['model']['projector']['use_batch_norm']
     )
     
-    model = NitroplastContrastiveModel(encoder, projector)
-    
+    model = NitroplastContrastiveModel(encoder, projector).to(device)
+
     # Load checkpoint
     checkpoint = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])

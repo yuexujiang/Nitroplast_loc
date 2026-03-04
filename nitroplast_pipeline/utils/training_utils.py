@@ -92,8 +92,12 @@ class MetricsTracker:
     
     def save(self, path: str):
         """Save metrics history."""
+        serializable = {
+            k: [float(v) for v in vals]
+            for k, vals in self.history.items()
+        }
         with open(path, 'w') as f:
-            json.dump(self.history, f, indent=2)
+            json.dump(serializable, f, indent=2)
     
     def load(self, path: str):
         """Load metrics history."""
@@ -332,6 +336,9 @@ def create_optimizer(
     
     We use lower learning rate for pretrained ESM-2 layers.
     """
+    learning_rate = float(learning_rate)
+    weight_decay = float(weight_decay)
+
     # Separate parameters
     esm_params = []
     projector_params = []

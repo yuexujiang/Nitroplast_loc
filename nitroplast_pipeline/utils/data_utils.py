@@ -411,6 +411,23 @@ def prepare_datasets(
     return train_dataset, val_dataset, test_dataset
 
 
+def collate_fn(batch):
+    """
+    Collate a list of dataset items into a batch.
+
+    Converts singular keys ('sequence', 'label', 'id') from __getitem__
+    into plural batch keys ('sequences', 'labels', 'ids') expected by train.py.
+    """
+    sequences = [item['sequence'] for item in batch]
+    labels = torch.tensor([item['label'] for item in batch], dtype=torch.long)
+    ids = [item['id'] for item in batch]
+    return {
+        'sequences': sequences,
+        'labels': labels,
+        'ids': ids
+    }
+
+
 if __name__ == "__main__":
     import argparse
     import yaml

@@ -109,6 +109,7 @@ def main(args):
             'dropout': config['model']['lora_dropout'],
             'target_modules': config['model']['lora_target_modules']
         },
+        num_end_lora_layers=config['model'].get('esm_num_end_lora'),
         freeze_layers=config['model']['freeze_esm_layers'],
         pooling_method=config['model']['pooling_method'],
         device=device
