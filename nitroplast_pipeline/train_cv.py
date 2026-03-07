@@ -347,6 +347,7 @@ def main(args):
         all_ids,
         similarity_threshold=config["data"]["sequence_similarity_threshold"],
         output_dir=str(processed_dir / "clustering_cv"),
+        force_recompute=args.force_recompute,
     )
     logger.info(f"Total clusters: {len(clusters)}")
 
@@ -636,6 +637,11 @@ if __name__ == "__main__":
         type=int,
         default=5,
         help="Number of cross-validation folds (default: 5)",
+    )
+    parser.add_argument(
+        "--force-recompute",
+        action="store_true",
+        help="Force recompute of sequence clustering (ignore cache)",
     )
     args = parser.parse_args()
     main(args)

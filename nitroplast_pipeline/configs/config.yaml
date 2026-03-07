@@ -85,6 +85,17 @@ training:
   patience: 15
   min_delta: 0.001
   
+  # Stage 2: MLP classifier (train_2stage.py)
+  classifier_hidden_dim: 64
+  classifier_dropout: 0.3
+  classifier_epochs: 50
+  classifier_lr: 0.001
+  classifier_patience: 10
+
+  # Stage 3: joint fine-tuning (train_2stage.py --stage3)
+  stage3_epochs: 20
+  stage3_lr: 1e-5
+
   # Checkpointing
   save_every_n_epochs: 50
   keep_top_k_checkpoints: 3

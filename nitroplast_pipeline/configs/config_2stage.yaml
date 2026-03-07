@@ -1,0 +1,82 @@
+# Config for train_2stage.py
+# Stage 1: SupCon + LoRA contrastive pretraining (90/10 train/val, early stopping)
+# Stage 2: 5-fold CV MLP classifier on frozen embeddings
+
+# ── Paths ─────────────────────────────────────────────────────────────────────
+paths:
+  positive_fasta:    "data/raw/positive_samples_368.fasta"
+  negative_fasta:    "data/raw/negative_samples_788.fasta"
+  processed_dir:     "data/processed/"
+  output_dir:        "results/2stage_3/"
+  checkpoint_dir:    "results/2stage_3/checkpoints/"
+  # Sub-test sets (section 11 logic): proteins filtered from test fold for targeted evaluation
+  no_utp_fasta:      "data/raw/positive_no_uTP.fasta"   # Positives without uTP motif
+  utp_neg_fasta:     "data/raw/uTP_in_negative.fasta"   # uTP-motif proteins in negatives
+
+# ── Data ──────────────────────────────────────────────────────────────────────
+data:
+  sequence_similarity_threshold: 0.7   # MMseqs2 clustering threshold for homology-aware splits
+  min_sequence_length: 30
+  max_sequence_length: 1022            # Hard limit: ESM-2 position embedding table
+
+# ── Model ─────────────────────────────────────────────────────────────────────
+model:
+  # ESM-2 backbone
+  esm_model_name:    "facebook/esm2_t33_650M_UR50D"
+  freeze_esm_layers: 33                # Freeze all layers; LoRA adds trainable adapters on top
+
+  # LoRA (applied to last N transformer layers only)
+  use_lora:              true
+  esm_num_end_lora:      null            # Apply LoRA to last 16 of 33 layers, None to all layers
+  lora_r:                8
+  lora_alpha:            16
+  lora_dropout:          0.1
+  lora_target_modules:
+    - "query"
+    - "key"
+    - "value"
+
+  # Pooling
+  pooling_method: "mean"               # mean | max | attention_weighted
+
+  # Projection head (maps ESM-2 embeddings → contrastive space)
+  projector:
+    input_dim:      1280               # ESM-2 650M hidden size
+    hidden_dims:    [512, 256]
+    output_dim:     128                # MLP classifier input dim (Stage 2)
+    dropout:        0.1
+    use_batch_norm: true
+
+# ── Training ──────────────────────────────────────────────────────────────────
+training:
+  # Stage 1 — contrastive pretraining
+  batch_size:         32
+  num_epochs:         100
+  learning_rate:      2e-4
+  weight_decay:       0.01
+  warmup_steps:       500
+  scheduler:          "cosine"         # cosine | linear | constant
+  min_lr:             1e-6
+  temperature:        0.07             # SupCon temperature
+  gradient_clip_norm: 1.0
+  mixed_precision:    true
+  num_workers:        4
+  pin_memory:         true
+  device:             "cuda"           # cuda | cpu
+
+  # Early stopping (Stage 1, on val contrastive loss)
+  patience:   30
+  min_delta:  0.001
+
+  # Checkpointing
+  save_every_n_epochs: 500             # Periodic checkpoint interval
+
+  # Stage 2 — MLP classifier (frozen embeddings, 5-fold CV)
+  classifier_hidden_dim:  64
+  classifier_dropout:     0.3
+  classifier_epochs:      50
+  classifier_lr:          0.001
+  classifier_patience:    10          # Early stopping on val MCC
+
+# ── Reproducibility ───────────────────────────────────────────────────────────
+seed: 42

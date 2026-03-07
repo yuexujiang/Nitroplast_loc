@@ -7,6 +7,7 @@ Handles:
 - Dataset creation for PyTorch
 """
 
+import json
 import os
 import numpy as np
 import pandas as pd
@@ -121,29 +122,42 @@ def cluster_sequences_mmseqs(
     sequences: List[str],
     ids: List[str],
     similarity_threshold: float = 0.7,
-    output_dir: Optional[str] = None
+    output_dir: Optional[str] = None,
+    force_recompute: bool = False
 ) -> Dict[int, List[int]]:
     """
     Cluster sequences by similarity using MMseqs2.
-    
+
     This ensures that train/val/test splits are done at the cluster level,
     preventing information leakage through sequence homology.
-    
+
+    Results are cached to clusters.json in output_dir and reused on subsequent
+    calls unless force_recompute=True.
+
     Args:
         sequences: List of protein sequences
         ids: List of sequence IDs
         similarity_threshold: Sequence identity threshold for clustering
-        output_dir: Directory for temporary files
-    
+        output_dir: Directory for temporary files and cache
+        force_recompute: If True, ignore any existing cache and re-run MMseqs2
+
     Returns:
         clusters: Dict mapping cluster_id -> list of sequence indices
     """
     if output_dir is None:
         output_dir = tempfile.mkdtemp()
-    
+
     output_dir = Path(output_dir)
     output_dir.mkdir(exist_ok=True, parents=True)
-    
+
+    # Load from cache if available
+    cache_path = output_dir / "clusters.json"
+    if cache_path.exists() and not force_recompute:
+        logger.info(f"Loading existing clusters from {cache_path}")
+        with open(cache_path, 'r') as f:
+            raw = json.load(f)
+        return {int(k): v for k, v in raw.items()}
+
     # Write sequences to FASTA
     fasta_path = output_dir / "sequences.fasta"
     with open(fasta_path, 'w') as f:
@@ -188,8 +202,12 @@ def cluster_sequences_mmseqs(
                 member_idx = id_to_idx[member_id]
                 clusters[cluster_id].append(member_idx)
         
+        clusters = dict(clusters)
         logger.info(f"Created {len(clusters)} sequence clusters")
-        return dict(clusters)
+        with open(cache_path, 'w') as f:
+            json.dump(clusters, f)
+        logger.info(f"Clusters cached to {cache_path}")
+        return clusters
     
     except subprocess.CalledProcessError as e:
         logger.error(f"MMseqs2 failed: {e.stderr.decode()}")
